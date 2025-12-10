@@ -1,21 +1,73 @@
 import numpy as np
 import janus_swi as janus
 
+def get_floor_type(cell):
+    if cell == 1:
+        return "smooth"
+    elif cell == 2:
+        return "uneven"
+    elif cell == 3:
+        return "slope"
+
 class RoutePlanner():
-    # variables
-    # map -> numpy array that displays the current map
-
     def __init__(self, map):
-        janus.consult("./resources/route_reasoner.pl")
-        self.map = map
+        janus.consult("../resources/route_reasoner.pl")
+        
+        x, y = 0, 0
+        for row in map:
+            for cell in row:
+                if cell != 0:
+                    janus.query_once("assertz(cell(X,Y))", { "X" : x, "Y": y})
+                    janus.query_once("assertz(floor_type(cell(X,Y), Type))", { "X": x, "Y": y, "Type": get_floor_type(cell)})
+                x += 1
 
-    def set_current_pos(self, pos):
-        janus.query_once("retractall(robot(_, _))", {}) #todo
-        res = janus.query_once("assertz(robot())", {}) #todo
-        return res["truths"]
+            x = 0
+            y += 1
+
+    def set_current_pos(self, x, y):
+        janus.query_once("retractall(located_at(robot, _))", {})
+        res = janus.query_once("assertz(located_at(robot, cell(X,Y)))", { "X": x, "Y": y })
+        return res["truth"]
 
     def get_route(self, goal):
         return nil
 
     def get_route_for_load(self, goal, type):
         return nil
+
+if __name__ == "__main__":
+    map = [
+        [0, 1, 1, 1],
+        [1, 1, 0, 1],
+        [1, 0, 2, 2],
+        [1, 1, 2, 0]
+    ]
+
+    planner = RoutePlanner(map)
+    planner.set_current_pos(0,3)
+    print("--- SMOOTH CELLS ---")
+    q = janus.query("floor_type(cell(X,Y),smooth)")
+    while ( s := q.next() ):
+        print(s['X'], s['Y'])
+    q.close()
+
+    print("--- UNEVEN CELLS ---")
+    q = janus.query("floor_type(cell(X,Y),uneven)")
+    while ( s := q.next() ):
+        print(s['X'], s['Y'])
+    q.close()
+
+    print("--- SLOPE CELLS ---")
+    q = janus.query("floor_type(cell(X,Y),slope)")
+    while ( s := q.next() ):
+        print(s['X'], s['Y'])
+    q.close()
+
+    print("--- ROBOT LOCATION ---")
+    q = janus.query("located_at(robot,cell(X,Y))")
+    while ( s := q.next() ):
+        print(s['X'], s['Y'])
+    q.close()
+
+    # goal = (3,0)
+    # planner.get_route(goal)
