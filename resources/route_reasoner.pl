@@ -1,44 +1,51 @@
 :- use_module(library(clpfd)).
 % cell(X, Y) available cells
-:- dynamic cell/2.
+:- dynamic cell/3.
 % door(D) existing doors
 :- dynamic door/1.
 % key(K) keys for interactive elements
+:- dynamic key/1.
+% barrier(B) existing barrier
 :- dynamic door/1.
+% switch(S) switch for barrier elements
+:- dynamic switch/1.
 % conveyor(C, length) conveyor belts
 :- dynamic conveyor/2.
 
-% floor_type(cell, type) -> type ∈ {liso, irregular, rampa}
+% floor_type(cell, type) -> type ∈ {smooth, uneven, slope_x, slope_y}
 :- dynamic floor_type/2.
-% located_at(element, cell) -> element ∈ {door, key, goal}
+% located_at(element, cell) -> element ∈ {key, goal}
 :- dynamic located_at/2.
 % entry(conveyor, cell)
 :- dynamic entry/2.
 % exit(conveyor, cell)
 :- dynamic exit/2.
 
-connected(cell(X,Y1), cell(X,Y2)) :- cell(X,Y1), cell(X,Y2), Y1 #= Y2-1.
-connected(cell(X,Y1), cell(X,Y2)) :- cell(X,Y1), cell(X,Y2), Y1 #= Y2+1.
-connected(cell(X1,Y), cell(X2,Y)) :- cell(X1,Y), cell(X2,Y), X1 #= X2+1.
-connected(cell(X1,Y), cell(X2,Y)) :- cell(X1,Y), cell(X2,Y), X1 #= X2-1.
-% connected(A, B) :- conveyor(C, _), entry(C, A), exit(C, B).
+adjacent(cell(X,Y1), cell(X,Y2)) :- cell(X,Y1), cell(X,Y2), Y1 #= Y2-1.
+adjacent(cell(X,Y1), cell(X,Y2)) :- cell(X,Y1), cell(X,Y2), Y1 #= Y2+1.
+adjacent(cell(X1,Y), cell(X2,Y)) :- cell(X1,Y), cell(X2,Y), X1 #= X2+1.
+adjacent(cell(X1,Y), cell(X2,Y)) :- cell(X1,Y), cell(X2,Y), X1 #= X2-1.
+
+connected(A, B) :- adjacent(A, B). %todo caso de las puertas y barreras
+connected(A, B) :- conveyor(C, _), entry(C, A), exit(C, B).
 
 % compatible(LoadType, FloorType)
 %   -> LoadType ∈ {standard, fragile, biochemical, dangerous}
-%   -> FloorType ∈ {smooth, uneven, slope}
+%   -> FloorType ∈ {smooth, uneven, mesh, carpet}
 compatible(standard, smooth).
 compatible(standard, uneven).
-compatible(standard, slope).
+compatible(standard, mesh).
+compatible(standard, carpet).
 
 compatible(fragile, smooth).
-compatible(fragile, slope).
+compatible(fragile, mesh).
+compatible(standard, carpet).
 
 compatible(biochemical, smooth).
 compatible(biochemical, uneven).
-compatible(biochemical, slope).
 
 compatible(dangerous, smooth).
-
+compatible(dangerous, mesh).
 
 % passable(cell(X,Y))
 passable(cell(X,Y), LoadType) :- cell(X,Y), floor_type(cell(X,Y), FloorType), compatible(LoadType, FloorType).

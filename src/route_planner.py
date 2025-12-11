@@ -7,7 +7,9 @@ def get_floor_type(cell):
     elif cell == 2:
         return "uneven"
     elif cell == 3:
-        return "slope"
+        return "mesh"
+    elif cell == 4:
+        return "carpet"
 
 class RoutePlanner():
     def __init__(self, map):
@@ -37,10 +39,10 @@ class RoutePlanner():
 
 if __name__ == "__main__":
     map = [
-        [0, 1, 1, 1],
+        [0, 1, 1, 4],
         [1, 1, 0, 1],
         [1, 0, 2, 2],
-        [1, 1, 2, 0]
+        [3, 1, 2, 0]
     ]
 
     planner = RoutePlanner(map)
@@ -57,8 +59,14 @@ if __name__ == "__main__":
         print(s['X'], s['Y'])
     q.close()
 
-    print("--- SLOPE CELLS ---")
-    q = janus.query("floor_type(cell(X,Y),slope)")
+    print("--- MESH CELLS ---")
+    q = janus.query("floor_type(cell(X,Y),mesh)")
+    while ( s := q.next() ):
+        print(s['X'], s['Y'])
+    q.close()
+
+    print("--- CARPET CELLS ---")
+    q = janus.query("floor_type(cell(X,Y),carpet)")
     while ( s := q.next() ):
         print(s['X'], s['Y'])
     q.close()
