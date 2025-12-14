@@ -6,7 +6,7 @@
 % key(K) keys for interactive elements
 :- dynamic key/1.
 % barrier(B) existing barrier
-:- dynamic door/1.
+:- dynamic barrier/1.
 % switch(S) switch for barrier elements
 :- dynamic switch/1.
 % conveyor(C, length) conveyor belts
@@ -47,9 +47,8 @@ compatible(biochemical, uneven).
 compatible(dangerous, smooth).
 compatible(dangerous, mesh).
 
-% passable(cell(X,Y))
+% passable(cell(X,Y), LoadType)
 passable(cell(X,Y), LoadType) :- cell(X,Y), floor_type(cell(X,Y), FloorType), compatible(LoadType, FloorType).
-
 
 
 % ---------------------------- BORRADORES ----------------------------------
