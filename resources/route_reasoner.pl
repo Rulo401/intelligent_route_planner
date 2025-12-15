@@ -50,6 +50,41 @@ compatible(dangerous, mesh).
 % passable(cell(X,Y), LoadType)
 passable(cell(X,Y), LoadType) :- cell(X,Y), floor_type(cell(X,Y), FloorType), compatible(LoadType, FloorType).
 
+% door_in_cell(+Cell, -DoorId)
+door_in_cell(Cell, D) :-
+    cell(X,Y),
+    Cell = cell(X,Y),
+    located_at(door(D), Cell).
+
+% update_keys(+Cell, +KeysIn, -KeysOut)
+update_keys(Cell, KeysIn, KeysOut) :-
+    findall(K, located_at(key(K), Cell), NewKeys),
+    append(KeysIn, NewKeys, Temp),
+    sort(Temp, KeysOut).   % quita duplicados
+
+% can_enter(+Cell, +Keys)
+% Se puede entrar si NO hay puerta,
+%o si hay puerta D y llevas la llave D.
+can_enter(Cell, _) :-
+    \+ door_in_cell(Cell, _).
+
+can_enter(Cell, Keys) :-
+    door_in_cell(Cell, D),
+    member(D, Keys).
+
+% step(+From, +To, +LoadType, +KeysIn, -KeysOut)
+% Desde From a To:
+%  1) deben estar conectadas
+%  2) To debe ser pasable para la carga
+%  3) To debe poder “entrarse” según puertas/llaves
+%  4) al entrar, se actualizan las llaves recogidas
+step(From, To, LoadType, KeysIn, KeysOut) :-
+    connected(From, To),
+    passable(To, LoadType),
+    can_enter(To, KeysIn),
+    update_keys(To, KeysIn, KeysOut).
+
+
 
 % ---------------------------- BORRADORES ----------------------------------
 
