@@ -1,0 +1,217 @@
+\documentclass[11pt,a4paper]{article}
+
+% -------------------- Paquetes --------------------
+\usepackage[spanish]{babel}
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage{geometry}
+\usepackage{microtype}
+\usepackage{hyperref}
+\usepackage{graphicx}
+\usepackage{listings}
+\usepackage{xcolor}
+
+\geometry{margin=2.5cm}
+
+% -------------------- Estilo listings --------------------
+\lstdefinestyle{code}{
+  basicstyle=\ttfamily\small,
+  keywordstyle=\color{blue!70!black}\bfseries,
+  commentstyle=\color{green!40!black},
+  numbers=left,
+  numberstyle=\tiny\color{gray},
+  numbersep=8pt,
+  tabsize=2,
+  breaklines=true,
+  frame=single,
+  rulecolor=\color{black!20}
+}
+
+\lstdefinelanguage{Prolog}{
+  morekeywords={:-,dynamic,findall,append,sort,member,select,use_module},
+  sensitive=true,
+  morecomment=[l]{\%}
+}
+
+% -------------------- Datos --------------------
+\title{Modelo de razonamiento lógico para la planificación de rutas de un robot en un entorno industrial}
+\author{Raúl Casamayor, Raúl López}
+\date{\today}
+
+\begin{document}
+\maketitle
+
+% =========================================================
+\section{Resumen del proyecto}
+
+El presente proyecto consiste en el diseño e implementación de un \textbf{modelo de razonamiento lógico} para un robot móvil que opera dentro de un entorno industrial, como puede ser una fábrica o un almacén automatizado. El objetivo principal del sistema es permitir al robot desplazarse por el entorno respetando un conjunto amplio de \textbf{restricciones físicas, funcionales y de seguridad}, garantizando que cualquier movimiento realizado sea coherente con las características del entorno y con el tipo de mercancía transportada.
+
+El enfoque adoptado es \textbf{declarativo}, utilizando el lenguaje Prolog para modelar el conocimiento del entorno y las reglas que gobiernan el movimiento del robot. En esta fase del proyecto, el sistema se centra exclusivamente en la \textbf{validación de movimientos} y en la correcta representación del problema. El \textbf{algoritmo de búsqueda de la ruta más óptima no está implementado todavía} y, por tanto, no se aborda en este documento.
+
+\subsection*{Representación del entorno}
+
+El entorno se representa como un mapa bidimensional discretizado en celdas. Cada celda corresponde a una posición válida del entorno y puede contener distintos elementos interactivos. El robot puede desplazarse entre celdas siempre que se cumplan las restricciones definidas por el modelo.
+
+Además del movimiento estándar entre celdas adyacentes, el entorno puede incluir \textbf{cintas transportadoras}, que permiten desplazamientos especiales desde una celda de entrada hacia una celda de salida, independientemente de su posición relativa en el mapa.
+
+\subsection*{Restricciones del sistema}
+
+El modelo impone múltiples restricciones que deben cumplirse simultáneamente para que un movimiento sea considerado válido. Estas restricciones permiten capturar tanto las limitaciones físicas del entorno como las normativas de seguridad propias de un entorno industrial.
+
+\paragraph{Restricción de conectividad}
+El robot solo puede desplazarse entre celdas que estén conectadas entre sí. Dos celdas se consideran conectadas si son adyacentes en sentido ortogonal (arriba, abajo, izquierda o derecha) o si están unidas mediante una cinta transportadora, que define un desplazamiento dirigido desde una celda de entrada hacia una celda de salida.
+
+\paragraph{Restricción por tipo de suelo}
+Cada celda del entorno tiene asociado un tipo de suelo que modela las características físicas de la superficie por la que se desplaza el robot. En el sistema se contemplan distintos tipos de suelo, tales como superficies lisas (\textit{smooth}), irregulares (\textit{uneven}), de rejilla (\textit{mesh}) y alfombradas (\textit{carpet}). El tipo de suelo de una celda impone restricciones directas sobre qué tipos de mercancía pueden circular de forma segura por ella.
+
+Las mercancías de tipo \textit{standard} presentan el mayor grado de compatibilidad, pudiendo transitar por cualquier tipo de suelo definido en el modelo. En cambio, las mercancías \textit{fragile} están limitadas a superficies que ofrecen mayor estabilidad, permitiéndose únicamente su paso por suelos lisos y de rejilla. Por su parte, las mercancías de tipo \textit{biochemical} solo pueden circular por suelos lisos o irregulares, mientras que las mercancías \textit{dangerous} quedan restringidas a suelos lisos y de rejilla, donde se garantizan condiciones adecuadas de seguridad.
+
+De este modo, un movimiento del robot hacia una celda concreta solo se considera válido si el tipo de suelo de dicha celda es compatible con el tipo de mercancía transportada, impidiendo así desplazamientos que podrían resultar inseguros o inviables en un entorno industrial real.
+
+
+\paragraph{Restricción por puertas y llaves}
+Algunas celdas del mapa pueden estar protegidas por puertas. Para poder acceder a una de estas celdas, el robot debe disponer de la llave correspondiente. Las llaves se encuentran distribuidas por el entorno y se recogen automáticamente cuando el robot entra en la celda que las contiene. De esta forma, el acceso a determinadas áreas queda condicionado al historial de movimientos del robot.
+
+\paragraph{Restricción por barreras y pulsadores}
+El entorno puede incluir barreras físicas que bloquean el paso del robot. Estas barreras están controladas por pulsadores situados en distintas celdas del mapa. Al entrar en una celda con un pulsador, su estado se conmuta, provocando la apertura o el cierre de la barrera asociada. El robot solo puede atravesar una celda bloqueada por una barrera si esta se encuentra abierta en ese momento.
+
+\paragraph{Restricción por zonas de tránsito}
+Además de las restricciones físicas, el entorno se divide en distintas zonas de tránsito que imponen normas adicionales en función del tipo de mercancía transportada. Estas zonas permiten modelar áreas compartidas con peatones, zonas de circulación de vehículos o áreas de acceso exclusivo para robots.
+
+Se distinguen tres tipos de zonas:
+\begin{itemize}
+  \item \textbf{Common zone}: zonas compartidas por peatones y robots. En estas áreas solo se permite el paso de mercancías de tipo \textit{standard} y \textit{fragile}, garantizando un mayor nivel de seguridad.
+  \item \textbf{Vehicle zone}: zonas donde circulan vehículos industriales y robots. En estas áreas se permite el transporte de mercancías \textit{standard}, \textit{fragile} y \textit{biochemical}.
+  \item \textbf{Robot zone}: zonas de acceso exclusivo para robots. Al no existir interacción con personas o vehículos, se permite el transporte de cualquier tipo de mercancía, incluyendo \textit{dangerous}.
+\end{itemize}
+
+Un movimiento solo se considera válido si el tipo de mercancía transportada está permitido tanto por el tipo de suelo como por la zona de tránsito de la celda destino.
+
+
+% =========================================================
+\section{Primera entrega}
+
+El desarrollo del proyecto comenzó con el \textbf{planteamiento completo del problema desde cero}. En esta primera fase se diseñó la estructura lógica del entorno, definiendo las entidades fundamentales y las reglas básicas que permiten razonar sobre los movimientos del robot.
+
+Durante esta etapa se implementaron las siguientes funcionalidades:
+\begin{itemize}
+  \item representación del mapa mediante celdas,
+  \item reglas de adyacencia y conectividad,
+  \item definición de tipos de suelo y compatibilidad con la mercancía,
+  \item sistema de puertas y llaves con recogida automática.
+\end{itemize}
+
+Sin embargo, para la primera entrega se decidió dejar fuera tres componentes que serían abordados posteriormente:
+\begin{itemize}
+  \item las barreras controladas por pulsadores,
+  \item las zonas de tránsito,
+  \item y el algoritmo de obtención de la ruta más óptima.
+\end{itemize}
+
+\subsection{Conectividad entre celdas}
+
+El primer paso fue definir cómo se relacionan las celdas entre sí. Se estableció un modelo de adyacencia ortogonal, permitiendo movimientos verticales y horizontales, así como conexiones especiales mediante cintas transportadoras.
+
+\begin{lstlisting}[style=code,language=Prolog,caption={Definición de adyacencia y conectividad}]
+adjacent(cell(X,Y1), cell(X,Y2)) :- Y1 #= Y2-1.
+adjacent(cell(X,Y1), cell(X,Y2)) :- Y1 #= Y2+1.
+adjacent(cell(X1,Y), cell(X2,Y)) :- X1 #= X2+1.
+adjacent(cell(X1,Y), cell(X2,Y)) :- X1 #= X2-1.
+
+connected(A, B) :- adjacent(A, B).
+connected(A, B) :- conveyor(C,_), entry(C,A), exit(C,B).
+\end{lstlisting}
+
+Estas reglas permiten al razonador decidir si existe una conexión válida entre dos posiciones del mapa.
+
+\subsection{Compatibilidad entre suelo y mercancía}
+
+Cada celda tiene asociado un tipo de suelo, y cada mercancía tiene restricciones sobre por dónde puede circular. Esta compatibilidad se modela mediante hechos declarativos.
+
+\begin{lstlisting}[style=code,language=Prolog,caption={Compatibilidad carga--suelo}]
+compatible(standard, smooth).
+compatible(fragile, smooth).
+compatible(biochemical, uneven).
+compatible(dangerous, mesh).
+\end{lstlisting}
+
+Estas reglas se utilizan posteriormente para decidir si una celda es transitable para un tipo concreto de carga.
+
+\subsection{Puertas y llaves}
+
+El sistema de puertas y llaves introduce memoria en el razonamiento. El robot mantiene un conjunto de llaves recogidas, que se actualiza automáticamente al entrar en una celda que contiene una llave.
+
+\begin{lstlisting}[style=code,language=Prolog,caption={Puertas, llaves y recogida de llaves}]
+door_in_cell(Cell, D) :-
+    located_at(door(D), Cell).
+
+update_keys(Cell, KeysIn, KeysOut) :-
+    findall(K, located_at(key(K), Cell), NewKeys),
+    append(KeysIn, NewKeys, Temp),
+    sort(Temp, KeysOut).
+
+can_enter(Cell, _) :-
+    \+ door_in_cell(Cell,_).
+
+can_enter(Cell, Keys) :-
+    door_in_cell(Cell,D),
+    member(D, Keys).
+\end{lstlisting}
+
+De esta forma, el acceso a determinadas zonas queda condicionado al historial de movimientos del robot.
+
+% =========================================================
+\section{Continuación del trabajo}
+
+En la continuación del proyecto se amplió el modelo lógico incorporando nuevas restricciones que aumentan el realismo del entorno: las \textbf{barreras con pulsadores} y las \textbf{zonas de tránsito}. Estas extensiones se integran de forma natural en el modelo declarativo existente, sin modificar la estructura básica del razonamiento.
+
+\subsection{Barreras y pulsadores}
+
+Las barreras se modelan como elementos que bloquean el acceso a una celda. Para poder atravesarlas, el robot debe activar un pulsador asociado. El estado de los pulsadores se mantiene como parte del estado del sistema y se actualiza cada vez que el robot entra en una celda que contiene uno.
+
+\begin{lstlisting}[style=code,language=Prolog,caption={Barreras y pulsadores}]
+toggle_switch(S, ActiveIn, ActiveOut) :-
+    ( select(S, ActiveIn, Rest)
+    -> ActiveOut = Rest
+    ;  ActiveOut = [S|ActiveIn]
+    ).
+
+barrier_open(B, ActiveSwitches) :-
+    controls(switch(S), barrier(B)),
+    member(S, ActiveSwitches).
+\end{lstlisting}
+
+Este enfoque permite modelar de forma sencilla comportamientos dinámicos sin recurrir a programación imperativa.
+
+\subsection{Zonas de tránsito}
+
+Las zonas de tránsito añaden una capa adicional de restricción. Cada celda puede pertenecer a una zona específica, y cada zona define qué tipos de mercancía pueden circular por ella.
+
+\begin{lstlisting}[style=code,language=Prolog,caption={Restricciones por zonas}]
+zone_allows(common_zone, standard).
+zone_allows(common_zone, fragile).
+
+zone_allows(vehicle_zone, standard).
+zone_allows(vehicle_zone, biochemical).
+
+zone_allows(robot_zone, dangerous).
+\end{lstlisting}
+
+Estas reglas se integran en el predicado de transitabilidad, combinándose con las restricciones de suelo.
+
+\subsection{Movimiento del robot}
+
+Finalmente, todas las restricciones se unen en el predicado que define un movimiento válido del robot. Este predicado verifica conectividad, compatibilidad, acceso por puertas y barreras, y actualiza el estado del sistema.
+
+\begin{lstlisting}[style=code,language=Prolog,caption={Paso del robot con restricciones completas}]
+step(From, To, LoadType, KeysIn, KeysOut, SwitchesIn, SwitchesOut) :-
+    connected(From, To),
+    passable(To, LoadType),
+    can_enter(To, KeysIn, SwitchesIn),
+    update_keys(To, KeysIn, KeysOut),
+    update_switches(To, SwitchesIn, SwitchesOut).
+\end{lstlisting}
+
+En esta fase, el sistema ya dispone de un modelo completo de restricciones. El desarrollo del algoritmo de planificación de rutas óptimas se deja como trabajo futuro.
+
+\end{document}

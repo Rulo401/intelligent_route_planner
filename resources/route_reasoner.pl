@@ -20,6 +20,13 @@
 :- dynamic entry/2.
 % exit(conveyor, cell)
 :- dynamic exit/2.
+% controls(switch, barrier)
+:- dynamic controls/2.
+
+% zone(cell(X,Y), Zone)
+% Zone ∈ {common_zone, vehicle_zone, robot_zone}
+:- dynamic zone/2.
+
 
 adjacent(cell(X,Y1), cell(X,Y2)) :- cell(X,Y1), cell(X,Y2), Y1 #= Y2-1.
 adjacent(cell(X,Y1), cell(X,Y2)) :- cell(X,Y1), cell(X,Y2), Y1 #= Y2+1.
@@ -47,8 +54,11 @@ compatible(biochemical, uneven).
 compatible(dangerous, smooth).
 compatible(dangerous, mesh).
 
-% passable(cell(X,Y), LoadType)
-passable(cell(X,Y), LoadType) :- cell(X,Y), floor_type(cell(X,Y), FloorType), compatible(LoadType, FloorType).
+% passable(+Cell, +LoadType)
+passable(Cell, LoadType) :-
+    passable_floor(Cell, LoadType),
+    zone_of(Cell, Zone),
+    zone_allows(Zone, LoadType).
 
 % door_in_cell(+Cell, -DoorId)
 door_in_cell(Cell, D) :-
@@ -76,19 +86,88 @@ can_enter(Cell, Keys) :-
 % Desde From a To:
 %  1) deben estar conectadas
 %  2) To debe ser pasable para la carga
-%  3) To debe poder “entrarse” según puertas/llaves
-%  4) al entrar, se actualizan las llaves recogidas
-step(From, To, LoadType, KeysIn, KeysOut) :-
+%  3) To debe poder “entrarse” según puertas/llaves y barreras/pulsadores
+%  4) al entrar, se actualizan las llaves recogidas y el estado de los pulsadores
+% step(+From, +To, +LoadType, +KeysIn, -KeysOut, +SwitchesIn, -SwitchesOut)
+step(From, To, LoadType, KeysIn, KeysOut, SwitchesIn, SwitchesOut) :-
     connected(From, To),
     passable(To, LoadType),
-    can_enter(To, KeysIn),
-    update_keys(To, KeysIn, KeysOut).
+    can_enter(To, KeysIn, SwitchesIn),
+    update_keys(To, KeysIn, KeysOut),
+    update_switches(To, SwitchesIn, SwitchesOut).
 
 
+% barrier_in_cell(+Cell, -BarrierId)
+barrier_in_cell(Cell, B) :-
+    located_at(barrier(B), Cell).
 
+% switch_in_cell(+Cell, -SwitchId)
+switch_in_cell(Cell, S) :-
+    located_at(switch(S), Cell).
+
+% toggle_switch(+SwitchId, +ActiveIn, -ActiveOut)
+toggle_switch(S, ActiveIn, ActiveOut) :-
+    (   select(S, ActiveIn, Rest)   % si estaba activo, lo quita
+    ->  ActiveOut = Rest
+    ;   ActiveOut = [S|ActiveIn]    % si no estaba, lo añade
+    ).
+
+% update_switches(+Cell, +ActiveIn, -ActiveOut)
+% Al ENTRAR en una celda con pulsador, cambia su estado (toggle).
+update_switches(Cell, ActiveIn, ActiveOut) :-
+    (   switch_in_cell(Cell, S)
+    ->  toggle_switch(S, ActiveIn, ActiveOut)
+    ;   ActiveOut = ActiveIn
+    ).
+
+% barrier_open(+BarrierId, +ActiveSwitches)
+% Una barrera está abierta si existe algún switch activo que la controle.
+barrier_open(B, ActiveSwitches) :-
+    controls(switch(S), barrier(B)),
+    member(S, ActiveSwitches).
+
+% can_enter(+Cell, +Keys, +ActiveSwitches)
+% 1) primero aplica tu regla actual de puertas/llaves
+% 2) si hay barrera en la celda, solo se entra si está abierta
+can_enter(Cell, Keys, ActiveSwitches) :-
+    can_enter(Cell, Keys),   % reutiliza tu can_enter/2 actual
+    (   barrier_in_cell(Cell, B)
+    ->  barrier_open(B, ActiveSwitches)
+    ;   true
+    ).
+
+% zone_of(+Cell, -Zone)
+zone_of(Cell, Zone) :-
+    (   zone(Cell, Z)
+    ->  Zone = Z
+    ;   Zone = common_zone
+    ).
+
+% zone_allows(+Zone, +LoadType)
+
+% Common Zone (pedestrians + robots)
+zone_allows(common_zone, standard).
+zone_allows(common_zone, fragile).
+
+% Vehicle Zone (vehicles + robots)
+zone_allows(vehicle_zone, standard).
+zone_allows(vehicle_zone, fragile).
+zone_allows(vehicle_zone, biochemical).
+
+% Robot Zone (robots only)
+zone_allows(robot_zone, standard).
+zone_allows(robot_zone, fragile).
+zone_allows(robot_zone, biochemical).
+zone_allows(robot_zone, dangerous).
+
+% passable_floor(+Cell, +LoadType)
+passable_floor(cell(X,Y), LoadType) :-
+    cell(X,Y),
+    floor_type(cell(X,Y), FloorType),
+    compatible(LoadType, FloorType).
 % ---------------------------- BORRADORES ----------------------------------
 
-% path(cell(X1,Y1), cell(X2,Y2), LoadType) :- 
+% path(cell(X1,Y1), cell(X2,Y2), LoadType) :-
 % route(cell(X,Y), LoadType) :- located_at(robot, cell(RX,RY)), path(cell(RX,RY), cell(X,Y), LoadType).
 
 % % allowed_surface(TipoMercancia, Superficie).

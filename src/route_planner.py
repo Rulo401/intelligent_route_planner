@@ -10,7 +10,7 @@ from matplotlib import colors
 def get_floor_type(cell):
     if cell == 1:
         return "smooth"
-    elif cell == 2:
+    elif cell == 2: 
         return "uneven"
     elif cell == 3:
         return "mesh"
