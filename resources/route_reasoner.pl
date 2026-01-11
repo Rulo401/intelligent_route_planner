@@ -1,6 +1,6 @@
 :- use_module(library(clpfd)).
 % cell(X, Y) available cells
-:- dynamic cell/3.
+:- dynamic cell/2.
 % door(D) existing doors
 :- dynamic door/1.
 % key(K) keys for interactive elements
@@ -12,7 +12,7 @@
 % conveyor(C, length) conveyor belts
 :- dynamic conveyor/2.
 
-% floor_type(cell, type) -> type ∈ {smooth, uneven, slope_x, slope_y}
+% floor_type(cell, type) -> type ∈ {smooth, uneven, mesh, carpet}
 :- dynamic floor_type/2.
 % located_at(element, cell) -> element ∈ {key, goal}
 :- dynamic located_at/2.
@@ -23,9 +23,8 @@
 % controls(switch, barrier)
 :- dynamic controls/2.
 
-% zone(cell(X,Y), Zone)
-% Zone ∈ {common_zone, vehicle_zone, robot_zone}
-:- dynamic zone/2.
+% zone_type(cell, zone) -> zone ∈ {common, vehicles_only, robots_only}
+:- dynamic zone_type/2.
 
 
 adjacent(cell(X,Y1), cell(X,Y2)) :- cell(X,Y1), cell(X,Y2), Y1 #= Y2-1.
@@ -33,38 +32,57 @@ adjacent(cell(X,Y1), cell(X,Y2)) :- cell(X,Y1), cell(X,Y2), Y1 #= Y2+1.
 adjacent(cell(X1,Y), cell(X2,Y)) :- cell(X1,Y), cell(X2,Y), X1 #= X2+1.
 adjacent(cell(X1,Y), cell(X2,Y)) :- cell(X1,Y), cell(X2,Y), X1 #= X2-1.
 
-connected(A, B) :- adjacent(A, B). %todo caso de las puertas y barreras
+connected(A, B) :- adjacent(A, B).
 connected(A, B) :- conveyor(C, _), entry(C, A), exit(C, B).
 
-% compatible(LoadType, FloorType)
+% compatible_floor(LoadType, FloorType)
 %   -> LoadType ∈ {standard, fragile, biochemical, dangerous}
 %   -> FloorType ∈ {smooth, uneven, mesh, carpet}
-compatible(standard, smooth).
-compatible(standard, uneven).
-compatible(standard, mesh).
-compatible(standard, carpet).
+compatible_floor(standard, smooth).
+compatible_floor(standard, uneven).
+compatible_floor(standard, mesh).
+compatible_floor(standard, carpet).
 
-compatible(fragile, smooth).
-compatible(fragile, mesh).
-compatible(standard, carpet).
+compatible_floor(fragile, smooth).
+compatible_floor(fragile, mesh).
+compatible_floor(fragile, carpet).
 
-compatible(biochemical, smooth).
-compatible(biochemical, uneven).
+compatible_floor(biochemical, smooth).
+compatible_floor(biochemical, uneven).
 
-compatible(dangerous, smooth).
-compatible(dangerous, mesh).
+compatible_floor(dangerous, smooth).
+compatible_floor(dangerous, mesh).
 
-% passable(+Cell, +LoadType)
-passable(Cell, LoadType) :-
-    passable_floor(Cell, LoadType),
-    zone_of(Cell, Zone),
-    zone_allows(Zone, LoadType).
+% compatible_zone(LoadType, ZoneType)
+%   -> LoadType ∈ {standard, fragile, biochemical, dangerous}
+%   -> ZoneType ∈ {common, vehicles_only, robots_only}
+compatible_zone(standard, common).
+compatible_zone(standard, vehicles_only).
+compatible_zone(standard, robots_only).
 
-% door_in_cell(+Cell, -DoorId)
-door_in_cell(Cell, D) :-
+compatible_zone(fragile, common).
+compatible_zone(fragile, vehicles_only).
+compatible_zone(fragile, robots_only).
+
+compatible_zone(biochemical, vehicles_only).
+compatible_zone(biochemical, robots_only).
+
+compatible_zone(dangerous, robots_only).
+
+% passable(cell(X,Y), LoadType)
+passable(cell(X,Y), LoadType) :-
     cell(X,Y),
-    Cell = cell(X,Y),
-    located_at(door(D), Cell).
+    passable_floor(cell(X,Y), LoadType),
+    passable_zone(cell(X,Y), LoadType).
+
+passable_floor(Cell, LoadType) :-
+    floor_type(Cell, FloorType),
+    compatible_floor(LoadType, FloorType).
+
+passable_zone(Cell, _) :- \+ zone_type(Cell, _).
+passable_zone(Cell, LoadType) :-
+    zone_type(Cell, ZoneType),
+    compatible_zone(LoadType, ZoneType).
 
 % update_keys(+Cell, +KeysIn, -KeysOut)
 update_keys(Cell, KeysIn, KeysOut) :-
@@ -76,10 +94,10 @@ update_keys(Cell, KeysIn, KeysOut) :-
 % Se puede entrar si NO hay puerta,
 %o si hay puerta D y llevas la llave D.
 can_enter(Cell, _) :-
-    \+ door_in_cell(Cell, _).
+    \+ located_at(door(_), Cell).
 
 can_enter(Cell, Keys) :-
-    door_in_cell(Cell, D),
+    located_at(door(D), Cell),
     member(D, Keys).
 
 % step(+From, +To, +LoadType, +KeysIn, -KeysOut)
@@ -136,133 +154,75 @@ can_enter(Cell, Keys, ActiveSwitches) :-
     ;   true
     ).
 
-% zone_of(+Cell, -Zone)
-zone_of(Cell, Zone) :-
-    (   zone(Cell, Z)
-    ->  Zone = Z
-    ;   Zone = common_zone
-    ).
+% route(+Cell, +LoadType, -Path)
+route(LoadType, PathPython) :- 
+    located_at(robot, Cell), 
+    located_at(goal, Goal),
+    astar(Cell, Goal, LoadType, Path), 
+    path_to_python(Path, PathPython).
 
-% zone_allows(+Zone, +LoadType)
+% ---------------------------------------------------------
+% A* Algorithm
+% ---------------------------------------------------------
 
-% Common Zone (pedestrians + robots)
-zone_allows(common_zone, standard).
-zone_allows(common_zone, fragile).
+% manhattan(+CellA, +CellB, -Distance)
+manhattan(cell(X1, Y1), cell(X2, Y2), Distance) :-
+    Distance is abs(X1 - X2) + abs(Y1 - Y2).
 
-% Vehicle Zone (vehicles + robots)
-zone_allows(vehicle_zone, standard).
-zone_allows(vehicle_zone, fragile).
-zone_allows(vehicle_zone, biochemical).
+% astar(+Start, +Goal, +LoadType, -Path)
+astar(Start, Goal, LoadType, Path) :-
+    manhattan(Start, Goal, D),
+    
+    %State: 
+    %    path(F, G, state(Cell, Keys, Switches), CellHistory)
+    %    F = G + D. Init G=0.
+    InitState = state(Start, [], []),
+    InitPath  = path(D, 0, InitState, [Start]),
+    
+    astar_search([InitPath], Goal, LoadType, SolutionState),
+    
+    % 4. Extraemos el historial de celdas y lo invertimos
+    SolutionState = path(_, _, _, ReversePath),
+    reverse(ReversePath, Path).
 
-% Robot Zone (robots only)
-zone_allows(robot_zone, standard).
-zone_allows(robot_zone, fragile).
-zone_allows(robot_zone, biochemical).
-zone_allows(robot_zone, dangerous).
+% ---------------------------------------------------------
+% Search engine A*
+% ---------------------------------------------------------
 
-% passable_floor(+Cell, +LoadType)
-passable_floor(cell(X,Y), LoadType) :-
-    cell(X,Y),
-    floor_type(cell(X,Y), FloorType),
-    compatible(LoadType, FloorType).
-% ---------------------------- BORRADORES ----------------------------------
+astar_search([path(_, _, state(Goal, _, _), Path) | _], Goal, _, path(_, _, state(Goal, _, _), Path)).
+astar_search([BestPath | RestQueue], Goal, LoadType, Solution) :-
+    BestPath = path(_, G, CurrentState, History),
 
-% path(cell(X1,Y1), cell(X2,Y2), LoadType) :-
-% route(cell(X,Y), LoadType) :- located_at(robot, cell(RX,RY)), path(cell(RX,RY), cell(X,Y), LoadType).
+    findall(
+        ChildPath,
+        (
+            % a) Generar transición válida usando tu predicado STEP
+            transition(CurrentState, NextState, LoadType),
+            
+            % b) Evitar ciclos simples (no volver a un estado ya en ESTE camino)
+            NextState = state(NextCell, _, _),
+            \+ member(NextCell, History), 
+            
+            % c) Calcular nuevos valores F, G, H
+            NewG is G + 1,
+            NextState = state(NextCell, _, _),
+            manhattan(NextCell, Goal, D),
+            NewF is NewG + D,
+            
+            % d) Crear estructura del nuevo camino
+            ChildPath = path(NewF, NewG, NextState, [NextCell | History])
+        ),
+        Children
+    ),
+    
+    append(Children, RestQueue, UnsortedQueue),
+    sort(UnsortedQueue, SortedQueue),
+    
+    astar_search(SortedQueue, Goal, LoadType, Solution).
 
-% % allowed_surface(TipoMercancia, Superficie).
+transition(state(Current, KeysIn, SwitchesIn), state(Next, KeysOut, SwitchesOut), LoadType) :-
+    step(Current, Next, LoadType, KeysIn, KeysOut, SwitchesIn, SwitchesOut).
 
-% % Por suelo liso puedes ir con todo
-% allowed_surface(_, suelo_liso).
-
-% % Por cinta mecánica puedes ir con todo
-% allowed_surface(_, cinta_mecanica).
-
-% % Por rampa solo estandar, bioquimico y fragil
-% allowed_surface(estandart, rampa).
-% allowed_surface(bioquimico, rampa).
-% allowed_surface(fragil,     rampa).
-
-% % Por suelo irregular solo estandar y bioquimico
-% allowed_surface(estandart,    suelo_irregular).
-% allowed_surface(bioquimico,   suelo_irregular).
-
-% % door_ok(InfoPuerta, LlavesQueLlevo).
-
-% door_ok(none, _).
-% door_ok(door(Id), Keys) :-
-%     member(Id, Keys).
-
-% % Recoger llaves al entrar en una celda
-
-% update_keys(X, Y, KeysIn, KeysOut) :-
-%     findall(K, key(K, X, Y), NewKeys),
-%     append(KeysIn, NewKeys, All),
-%     sort(All, KeysOut).   % elimina duplicados y ordena
-
-% % neighbor(+X, +Y, -NX, -NY) : (NX,NY) es vecina de (X,Y)
-
-% neighbor(X, Y, NX, Y) :-
-%     NX is X + 1,
-%     cell(NX, Y, _, _).
-
-% neighbor(X, Y, NX, Y) :-
-%     NX is X - 1,
-%     cell(NX, Y, _, _).
-
-% neighbor(X, Y, X, NY) :-
-%     NY is Y + 1,
-%     cell(X, NY, _, _).
-
-% neighbor(X, Y, X, NY) :-
-%     NY is Y - 1,
-%     cell(X, NY, _, _).
-
-% % cost_surface(Superficie, CostePaso).
-% cost_surface(suelo_liso,      1).
-% cost_surface(cinta_mecanica,  0.5).  % ejemplo: más rápida
-% cost_surface(rampa,           2).
-% cost_surface(suelo_irregular, 3).
-
-
-% % step(+Mercancia, +Keys, +X, +Y, -NX, -NY, -Coste)
-
-% step(Mercancia, Keys, X, Y, NX, NY, Cost) :-
-%     neighbor(X, Y, NX, NY),
-%     cell(NX, NY, Surface, DoorInfo),
-%     allowed_surface(Mercancia, Surface),
-%     door_ok(DoorInfo, Keys),
-%     cost_surface(Surface, Cost).
-
-
-% % path(+Mercancia, +X, +Y, +GX, +GY, +KeysIn, +Visitados, -Camino, -CosteTotal).
-
-% % Caso base: ya estamos en el destino
-% path(_, X, Y, X, Y, Keys, _, [(X,Y)], 0) :-
-%     % recogemos posibles llaves del destino
-%     update_keys(X, Y, Keys, _).
-
-% % Caso recursivo
-% path(Mercancia, X, Y, GX, GY, KeysIn, Visited, [(X,Y) | RestPath], TotalCost) :-
-
-%     % al entrar en (X,Y), recogemos llaves
-%     update_keys(X, Y, KeysIn, Keys1),
-
-%     % movimiento a una celda vecina
-%     step(Mercancia, Keys1, X, Y, NX, NY, StepCost),
-
-%     \+ member((NX,NY), Visited),            % evitar ciclos simples
-
-%     path(Mercancia, NX, NY, GX, GY, Keys1,
-%          [(NX,NY) | Visited], RestPath, RestCost),
-
-%     TotalCost is StepCost + RestCost.
-
-% % shortest_route(+Mercancia, +SX, +SY, +GX, +GY, -Camino, -Coste)
-
-% shortest_route(Mercancia, SX, SY, GX, GY, BestPath, BestCost) :-
-%     setof(Cost-Path,
-%           path(Mercancia, SX, SY, GX, GY,
-%                [],         % sin llaves al inicio
-%                [(SX,SY)],  % visitados
-%                Path, Cost),[BestCost-BestPath | _]).
+% translate the path into a data structure manageable by Python
+path_to_python([],[]).
+path_to_python([cell(X,Y) | NextCells], [[X,Y] | NextCellsPython]) :- path_to_python(NextCells, NextCellsPython).

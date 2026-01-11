@@ -6,6 +6,10 @@ matplotlib.use('TkAgg')
 
 import matplotlib.pyplot as plt
 from matplotlib import colors
+from matplotlib.patches import Patch
+from matplotlib.lines import Line2D
+
+import itertools
 
 def get_floor_type(cell):
     if cell == 1:
@@ -26,6 +30,12 @@ def code_floor_type(cell):
         return 3
     elif cell == "carpet":
         return 4
+    
+def _cell_cmp(x, y):
+    if x[0] == y[0]:
+       return x[1] > y[1]
+    
+    return x[0] > y[0]
 
 class RoutePlanner():
     # Variables
@@ -36,7 +46,7 @@ class RoutePlanner():
     #   ax: plot artist
     #   cmap: color map
     #   norm: color normalization
-    def __init__(self, map):
+    def __init__(self, map, doors=0, items=[]):
         janus.consult("../resources/route_reasoner.pl")
         
         x, y = 0, 0
@@ -51,6 +61,26 @@ class RoutePlanner():
             y += 1
 
         self.max_y, self.max_x = map.shape
+
+        for door, start, end in doors:
+            if start == end:
+                raise Exception(f"Door {door} must be at least 2 cells long")
+            elif start[1] == end[1]:
+                limits = sorted([start[0], end[0]])
+                for x in range(limits[0], limits[1]+1):
+                    janus.query_once("assertz(located_at(door(Name), cell(X,Y)))", { "Name" : door, "X" : x, "Y": start[1]})
+            elif start[0] == end[0]:
+                limits = sorted([start[1], end[1]])
+                for y in range(limits[0], limits[1]+1):
+                    janus.query_once("assertz(located_at(door(Name), cell(X,Y)))", { "Name" : door, "X" : start[0], "Y": y})
+            else:
+                raise Exception(f"Door {door} is not vertical or horizontal")
+
+        for item_type, name, x, y in items:
+            if item_type == "key":
+                janus.query_once("assertz(located_at(key(Name), cell(X,Y)))", { "Name" : name, "X" : x, "Y": y})
+            elif item_type == "switch":
+                janus.query_once("assertz(located_at(switch(Name), cell(X,Y)))", { "Name" : name, "X" : x, "Y": y})
 
         # Setup plot
         plt.ion()
@@ -70,9 +100,56 @@ class RoutePlanner():
         q.close()
 
         return data
+    
+    def get_doors(self):
+        q = janus.query("located_at(door(D), cell(X,Y))")
+        door_cells = []
+        while ( s := q.next() ):
+           door_cells.append((s["D"], (s["Y"], s["X"])))
+        q.close()
+
+        doors = []
+        
+        for door, cells in itertools.groupby(door_cells, lambda x: x[0]):
+            cells = [cell for d, cell in cells]
+            cells = sorted(cells)
+            doors.append((door, cells[0], cells[-1]))
+
+        return doors
+    
+    def get_current_items_location(self):
+        keys = self._get_keys()
+        switches = self._get_switches()
+
+        return { "keys" : keys, "switches" : switches }
+    
+    def _get_keys(self):
+        q = janus.query("located_at(key(K), cell(X,Y))")
+        keys = []
+        while ( s := q.next() ):
+           keys.append((s["K"], (s["Y"], s["X"])))
+        q.close()
+
+        return keys
+    
+    def _get_switches(self):
+        q = janus.query("located_at(switch(S), cell(X,Y))")
+        switches = []
+        while ( s := q.next() ):
+           switches.append((s["S"], (s["Y"], s["X"])))
+        q.close()
+
+        return switches
 
     def get_current_pos(self):
         res = janus.query_once("located_at(robot, cell(X,Y))")
+        if res["truth"]:
+            return res["X"], res["Y"]
+
+        return None
+    
+    def get_current_goal(self):
+        res = janus.query_once("located_at(goal, cell(X,Y))")
         if res["truth"]:
             return res["X"], res["Y"]
 
@@ -82,18 +159,21 @@ class RoutePlanner():
         janus.query_once("retractall(located_at(robot, _))", {})
         res = janus.query_once("assertz(located_at(robot, cell(X,Y)))", { "X": x, "Y": y })
         return res["truth"]
+    
+    def set_goal(self, x, y):
+        janus.query_once("retractall(located_at(goal, _))", {})
+        res = janus.query_once("assertz(located_at(goal, cell(X,Y)))", { "X": x, "Y": y })
+        return res["truth"]
 
-    def get_route(self, goal):
-        return nil
+    def get_route_for_load(self, type="standard"):
+        q = janus.query_once("route(LoadType, Path)", { "LoadType" : type })
+        return q["Path"]
 
-    def get_route_for_load(self, goal, type):
-        return nil
-
-    def print_current_map(self):
-        # 1. Load map
+    def print_current_map(self, route=None):
+        # Load map
         map = self.get_current_map()
 
-        # 2. Show base grid
+        # Show base grid
         self.ax.clear()
         self.ax.imshow(map, cmap=self.cmap, norm=self.norm, origin='upper')
 
@@ -102,7 +182,25 @@ class RoutePlanner():
         self.ax.set_xticks(np.arange(-.5, self.max_x, 1)); self.ax.set_yticks(np.arange(-.5, self.max_y, 1))
         self.ax.set_xticklabels([]); self.ax.set_yticklabels([]) #hide numbers
 
-        # 3. Show robot
+        # Show route
+        if route:
+            path_x = []
+            path_y = []
+            for x,y in route:
+                path_x.append(x)
+                path_y.append(y)
+            
+            # Dibujamos la línea
+            if path_x and path_y:
+                self.ax.plot(path_x, path_y, 
+                             color='blue',       # Color de la ruta
+                             linewidth=4,        # Grosor
+                             linestyle='-',      # Estilo de línea
+                             alpha=0.6,          # Transparencia para ver el suelo debajo
+                             zorder=9            # Orden Z: encima del suelo, debajo del robot
+                             )
+                
+        # Show robot
         robot_pos = self.get_current_pos()
         if robot_pos:
             self.ax.plot(robot_pos[0], robot_pos[1], 
@@ -114,30 +212,103 @@ class RoutePlanner():
                 zorder=10
             )
 
-            # Opcional: Añadir texto o etiqueta al lado
-            # self.ax.text(robot_pos[0], robot_pos[1], 'R', 
-            #         ha='center', va='center', 
-            #         color='black', fontweight='bold')
+        # Show goal
+        goal_pos = self.get_current_goal()
+        if goal_pos:
+            self.ax.plot(goal_pos[0], goal_pos[1], 
+                marker='*',
+                markersize=20,
+                color='gold',
+                markeredgecolor='k',
+                markeredgewidth=2,  
+                zorder=10
+            )
 
-        # # 3. DIBUJAR LAS PUERTAS (ICONOS ENTRE CELDAS)
-        # for (p1, p2) in puertas_logicas:
-        #     r1, c1 = p1
-        #     r2, c2 = p2
+        # Show items
+        items = self.get_current_items_location()
+        for key, pos in items["keys"]:
+            self.ax.plot(pos[0], pos[1], 
+                marker='d',
+                markersize=20,
+                color='gold',
+                markeredgecolor='k',
+                markeredgewidth=2,  
+                zorder=10
+            )
+
+            self.ax.text(pos[0], pos[1], key[:1], 
+                    ha='center', va='center', 
+                    color='black', fontweight='bold',
+                    zorder=11)
             
-        #     # Calcular centro de la "puerta" (promedio de coordenadas)
-        #     # Nota: en matplotlib imshow, X es columnas (c), Y es filas (r)
-        #     x_prom = (c1 + c2) / 2
-        #     y_prom = (r1 + r2) / 2
+        for switch, pos in items["switches"]:
+            self.ax.plot(pos[0], pos[1], 
+                marker='s',
+                markersize=20,
+                color='grey',
+                markeredgecolor='k',
+                markeredgewidth=2,  
+                zorder=10
+            )
+
+            self.ax.text(pos[0], pos[1], switch[:1], 
+                    ha='center', va='center', 
+                    color='black', fontweight='bold',
+                    zorder=11)
+
+        # Show doors
+        for door, start, end in self.get_doors():
+            c1, r1 = start
+            c2, r2 = end
             
-        #     # Determinar orientación para dibujar una línea gruesa (la puerta)
-        #     if r1 == r2: # Puerta Vertical (entre columnas)
-        #         # Dibujamos línea vertical
-        #         self.ax.plot([x_prom, x_prom], [r1 - 0.4, r1 + 0.4], 
-        #                 color='gold', linewidth=5, solid_capstyle='round')
-        #     else: # Puerta Horizontal (entre filas)
-        #         # Dibujamos línea horizontal
-        #         self.ax.plot([c1 - 0.4, c1 + 0.4], [y_prom, y_prom], 
-        #                 color='gold', linewidth=5, solid_capstyle='round')
+            # door center
+            x_prom = (c1 + c2) / 2
+            y_prom = (r1 + r2) / 2
+            
+            if c1 == c2: # Vertical
+                self.ax.plot([x_prom, x_prom], [r1 - 0.4, r2 + 0.4], 
+                        color='gold', linewidth=5, solid_capstyle='round')
+                
+                self.ax.text(x_prom + 0.3, y_prom, door, 
+                    ha='center', va='center', 
+                    color='black', fontweight='bold',
+                    zorder=11)
+            else: # Horizontal
+                self.ax.plot([c1 - 0.4, c2 + 0.4], [y_prom, y_prom], 
+                        color='gold', linewidth=5, solid_capstyle='round')
+                
+                self.ax.text(x_prom, y_prom + 0.3, door, 
+                    ha='center', va='center', 
+                    color='black', fontweight='bold',
+                    zorder=11)
+                
+        legend_elements = [
+            # Floor types
+            Patch(facecolor='white', edgecolor='black', label='Smooth'),
+            Patch(facecolor='wheat', edgecolor='black', label='Uneven'),
+            Patch(facecolor='gray', edgecolor='black', label='Mesh'),
+            Patch(facecolor='indianred', edgecolor='black', label='Carpet'),
+            Patch(facecolor='black', edgecolor='gray', label='Wall'),
+            
+            # Doors
+            Line2D([0], [0], color='gold', lw=4, label='Door'),
+
+            # Items
+            Line2D([0], [0], marker='o', color='w', label='Robot',
+                   markerfacecolor='cyan', markeredgecolor='k', markersize=10),
+            Line2D([0], [0], marker='*', color='w', label='Goal',
+                   markerfacecolor='gold', markeredgecolor='k', markersize=12),
+            Line2D([0], [0], marker='d', color='w', label='Key',
+                   markerfacecolor='gold', markeredgecolor='k', markersize=10),
+            Line2D([0], [0], marker='s', color='w', label='Switch',
+                   markerfacecolor='grey', markeredgecolor='k', markersize=10),
+            
+            # Route
+            Line2D([0], [0], color='blue', lw=2, label='Route')
+        ]
+
+        self.ax.legend(handles=legend_elements, loc='upper left', bbox_to_anchor=(1.05, 1), borderaxespad=0.)
+        self.fig.tight_layout()
 
         plt.title("World map")
         plt.draw()      # Fuerza el dibujado
@@ -145,17 +316,28 @@ class RoutePlanner():
 
 if __name__ == "__main__":
     map = [
-        [0, 1, 1, 4],
-        [1, 1, 0, 1],
-        [1, 0, 2, 2],
-        [1, 0, 2, 2],
-        [1, 0, 2, 2],
-        [1, 0, 2, 2],
-        [1, 0, 2, 2],
-        [3, 1, 2, 0]
+        [0, 4, 4, 4, 4, 4, 4],
+        [1, 1, 1, 1, 0, 1, 1],
+        [1, 3, 1, 0, 0, 2, 2],
+        [1, 3, 1, 0, 0, 2, 2],
+        [1, 3, 1, 0, 0, 2, 2],
+        [1, 3, 1, 0, 0, 2, 2],
+        [1, 3, 1, 0, 2, 2, 2],
+        [1, 3, 1, 1, 2, 0, 0],
+        [1, 3, 1, 1, 2, 0, 0]
     ]
 
-    planner = RoutePlanner(np.asarray(map, dtype=np.int32))
+    items = [
+        ("key", "A", 0, 1),
+        ("switch", "S", 6, 2)
+    ]
+
+    doors = [
+        ("A", (1,5), (1,6)),
+        ("S", (7,3), (8,3))
+    ]
+
+    planner = RoutePlanner(np.asarray(map, dtype=np.int32), doors, items)
     planner.set_current_pos(0,3)
     print("--- SMOOTH CELLS ---")
     q = janus.query("floor_type(cell(X,Y),smooth)")
@@ -187,9 +369,23 @@ if __name__ == "__main__":
         print(s['X'], s['Y'])
     q.close()
 
-    # goal = (3,0)
-    # planner.get_route(goal)
+    print("--- DOORS ---")
+    q = janus.query("located_at(door(D),cell(X,Y))")
+    while ( s := q.next() ):
+        print(s['X'], s['Y'], s['D'])
+    q.close()
 
-    planner.print_current_map()
+    planner.set_goal(6,6)
+    print("--- GOAL LOCATION ---")
+    q = janus.query("located_at(goal,cell(X,Y))")
+    while ( s := q.next() ):
+        print(s['X'], s['Y'])
+    q.close()
+
+    route = planner.get_route_for_load("biochemical")
+    print("--- ROUTE ---")
+    print(route)
+
+    planner.print_current_map(route)
     plt.ioff() # Desactivar modo interactivo
     plt.show() # Mantener la ventana abierta al final para ver el resultado
