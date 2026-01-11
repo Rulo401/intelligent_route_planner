@@ -105,7 +105,7 @@ class RoutePlanner():
         q = janus.query("located_at(door(D), cell(X,Y))")
         door_cells = []
         while ( s := q.next() ):
-           door_cells.append((s["D"], (s["Y"], s["X"])))
+           door_cells.append((s["D"], (s["X"], s["Y"])))
         q.close()
 
         doors = []
@@ -127,7 +127,7 @@ class RoutePlanner():
         q = janus.query("located_at(key(K), cell(X,Y))")
         keys = []
         while ( s := q.next() ):
-           keys.append((s["K"], (s["Y"], s["X"])))
+           keys.append((s["K"], (s["X"], s["Y"])))
         q.close()
 
         return keys
@@ -136,7 +136,7 @@ class RoutePlanner():
         q = janus.query("located_at(switch(S), cell(X,Y))")
         switches = []
         while ( s := q.next() ):
-           switches.append((s["S"], (s["Y"], s["X"])))
+           switches.append((s["S"], (s["X"], s["Y"])))
         q.close()
 
         return switches
@@ -328,13 +328,13 @@ if __name__ == "__main__":
     ]
 
     items = [
-        ("key", "A", 0, 1),
-        ("switch", "S", 6, 2)
+        ("key", "a", 0, 6),
+        ("switch", "s", 2, 6)
     ]
 
     doors = [
-        ("A", (1,5), (1,6)),
-        ("S", (7,3), (8,3))
+        ("a", (5,1), (6,1)),
+        ("s", (3,7), (3,8))
     ]
 
     planner = RoutePlanner(np.asarray(map, dtype=np.int32), doors, items)
@@ -375,14 +375,19 @@ if __name__ == "__main__":
         print(s['X'], s['Y'], s['D'])
     q.close()
 
-    planner.set_goal(6,6)
+    planner.set_goal(6,3)
     print("--- GOAL LOCATION ---")
     q = janus.query("located_at(goal,cell(X,Y))")
     while ( s := q.next() ):
         print(s['X'], s['Y'])
     q.close()
 
-    route = planner.get_route_for_load("biochemical")
+    q = janus.query_once("can_enter(cell(5,1), [])")
+    print(f"Can enter door 5 1? {q}")
+    q = janus.query_once("can_enter(cell(3,7), [])")
+    print(f"Can enter door 3 7? {q}")
+
+    route = planner.get_route_for_load()#"biochemical")
     print("--- ROUTE ---")
     print(route)
 
