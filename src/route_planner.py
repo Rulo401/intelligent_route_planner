@@ -466,6 +466,7 @@ class RoutePlanner():
 if __name__ == "__main__":
     map = [
         [0, 4, 4, 4, 4, 4, 4, 0],
+        [0, 4, 4, 4, 4, 4, 4, 0],
         [1, 1, 1, 1, 0, 1, 1, 0],
         [1, 3, 1, 0, 0, 2, 2, 0],
         [1, 3, 1, 0, 0, 2, 2, 0],
@@ -479,19 +480,20 @@ if __name__ == "__main__":
     ]
 
     items = [
-        ("key", "a", 0, 6),
-        ("switch", "s", 1, 10)
+        ("key", "a", 4, 0),
+        ("switch", "s", 1, 11)
     ]
 
     doors = [
-        ("a", (5,1), (6,1))
+        ("a", (5,2), (6,2))
     ]
 
     barriers = [
-        ("s", (3,7), (3,8))
+        ("s", (3,8), (3,9))
     ]
 
     zones = [
+        [0, 1, 1, 1, 1, 1, 1, 0],
         [0, 1, 1, 1, 1, 1, 1, 0],
         [2, 2, 1, 1, 0, 1, 1, 0],
         [2, 2, 3, 0, 0, 1, 1, 0],
@@ -506,7 +508,7 @@ if __name__ == "__main__":
     ]
 
     conveyors =[
-        ("c", 20, (0,2), (7,4))
+        ("c", 20, (0,3), (7,5))
     ]
 
     planner = RoutePlanner(np.asarray(map, dtype=np.int32), doors, barriers, items, zones, conveyors)
@@ -559,7 +561,7 @@ if __name__ == "__main__":
     q = janus.query_once("can_enter(cell(3,7), [])")
     print(f"Can enter door 3 7? {q}")
 
-    route = planner.get_route_for_load("biochemical")
+    route = planner.get_route_for_load()#"biochemical")
     print("--- ROUTE ---")
     print(route)
 
