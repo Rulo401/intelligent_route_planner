@@ -244,7 +244,14 @@ class RoutePlanner():
 
         # Show zones
         for (x, y), zone_type in self.get_current_zones().items():
-            if zone_type == 'vehicles_only':
+            if zone_type == 'common':
+                rect = matplotlib.patches.Rectangle(
+                    (x - 0.5, y - 0.5), 1, 1, 
+                    linewidth=1, edgecolor='black', facecolor='none', 
+                    hatch='..', alpha=0.3, zorder=5)
+                self.ax.add_patch(rect)
+
+            elif zone_type == 'vehicles_only':
                 rect = matplotlib.patches.Rectangle(
                     (x - 0.5, y - 0.5), 1, 1, 
                     linewidth=1, edgecolor='black', facecolor='none', 
@@ -271,7 +278,6 @@ class RoutePlanner():
                              color='blue',
                              linewidth=4,
                              linestyle='-',
-                             alpha=0.6,
                              zorder=9
                              )
                 
@@ -342,7 +348,7 @@ class RoutePlanner():
             
             if c1 == c2: # Vertical
                 self.ax.plot([x_prom, x_prom], [r1 - 0.4, r2 + 0.4], 
-                        color='gold', linewidth=5, solid_capstyle='round')
+                        color='gold', linewidth=5, solid_capstyle='round', zorder=10)
                 
                 self.ax.text(x_prom + 0.3, y_prom, door, 
                     ha='center', va='center', 
@@ -350,7 +356,7 @@ class RoutePlanner():
                     zorder=11)
             else: # Horizontal
                 self.ax.plot([c1 - 0.4, c2 + 0.4], [y_prom, y_prom], 
-                        color='gold', linewidth=5, solid_capstyle='round')
+                        color='gold', linewidth=5, solid_capstyle='round', zorder=10)
                 
                 self.ax.text(x_prom, y_prom + 0.3, door, 
                     ha='center', va='center', 
@@ -368,7 +374,7 @@ class RoutePlanner():
             
             if c1 == c2: # Vertical
                 self.ax.plot([x_prom, x_prom], [r1 - 0.4, r2 + 0.4], 
-                        color='darkorange', linewidth=5, solid_capstyle='round')
+                        color='darkorange', linewidth=5, solid_capstyle='round', zorder=10)
                 
                 self.ax.text(x_prom + 0.3, y_prom, barrier, 
                     ha='center', va='center', 
@@ -376,7 +382,7 @@ class RoutePlanner():
                     zorder=11)
             else: # Horizontal
                 self.ax.plot([c1 - 0.4, c2 + 0.4], [y_prom, y_prom], 
-                        color='darkorange', linewidth=5, solid_capstyle='round')
+                        color='darkorange', linewidth=5, solid_capstyle='round', zorder=10)
                 
                 self.ax.text(x_prom, y_prom + 0.3, barrier, 
                     ha='center', va='center', 
@@ -392,6 +398,8 @@ class RoutePlanner():
             Patch(facecolor='black', edgecolor='gray', label='Wall'),
 
             # Zones
+            Patch(facecolor='none', edgecolor='black', label='Maneuver'),
+            Patch(facecolor='none', edgecolor='black', hatch='..', label='Common'),
             Patch(facecolor='none', edgecolor='black', hatch='///', label='Vehicles Only'),
             Patch(facecolor='none', edgecolor='black', hatch='OO', label='Robots Only'),
             
@@ -431,12 +439,13 @@ if __name__ == "__main__":
         [1, 3, 1, 0, 2, 2, 2],
         [1, 3, 1, 1, 2, 0, 0],
         [1, 3, 1, 1, 2, 0, 0],
+        [1, 1, 1, 0, 0, 0, 0],
         [1, 1, 1, 0, 0, 0, 0]
     ]
 
     items = [
         ("key", "a", 0, 6),
-        ("switch", "s", 2, 9)
+        ("switch", "s", 1, 10)
     ]
 
     doors = [
@@ -457,6 +466,7 @@ if __name__ == "__main__":
         [2, 2, 3, 0, 3, 3, 3],
         [3, 3, 3, 3, 3, 0, 0],
         [3, 3, 3, 3, 3, 0, 0],
+        [3, 3, 3, 0, 0, 0, 0],
         [3, 3, 3, 0, 0, 0, 0]
     ]
 

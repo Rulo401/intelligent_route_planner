@@ -115,25 +115,17 @@ step(From, To, LoadType, KeysIn, KeysOut, SwitchesIn, SwitchesOut) :-
     update_switches(To, SwitchesIn, SwitchesOut).
 
 
-% barrier_in_cell(+Cell, -BarrierId)
-barrier_in_cell(Cell, B) :-
-    located_at(barrier(B), Cell).
-
-% switch_in_cell(+Cell, -SwitchId)
-switch_in_cell(Cell, S) :-
-    located_at(switch(S), Cell).
-
 % toggle_switch(+SwitchId, +ActiveIn, -ActiveOut)
 toggle_switch(S, ActiveIn, ActiveOut) :-
-    (   select(S, ActiveIn, Rest)   % si estaba activo, lo quita
+    (   select(switch(S), ActiveIn, Rest)   % si estaba activo, lo quita
     ->  ActiveOut = Rest
-    ;   ActiveOut = [S|ActiveIn]    % si no estaba, lo añade
+    ;   ActiveOut = [switch(S)|ActiveIn]    % si no estaba, lo añade
     ).
 
 % update_switches(+Cell, +ActiveIn, -ActiveOut)
 % Al ENTRAR en una celda con pulsador, cambia su estado (toggle).
 update_switches(Cell, ActiveIn, ActiveOut) :-
-    (   switch_in_cell(Cell, S)
+    (   located_at(switch(S), Cell)
     ->  toggle_switch(S, ActiveIn, ActiveOut)
     ;   ActiveOut = ActiveIn
     ).
@@ -141,15 +133,14 @@ update_switches(Cell, ActiveIn, ActiveOut) :-
 % barrier_open(+BarrierId, +ActiveSwitches)
 % Una barrera está abierta si existe algún switch activo que la controle.
 barrier_open(B, ActiveSwitches) :-
-    controls(switch(S), barrier(B)),
-    member(S, ActiveSwitches).
+    member(switch(B), ActiveSwitches).
 
 % can_enter(+Cell, +Keys, +ActiveSwitches)
 % 1) primero aplica tu regla actual de puertas/llaves
 % 2) si hay barrera en la celda, solo se entra si está abierta
 can_enter(Cell, Keys, ActiveSwitches) :-
     can_enter(Cell, Keys),   % reutiliza tu can_enter/2 actual
-    (   barrier_in_cell(Cell, B)
+    (   located_at(barrier(B), Cell)
     ->  barrier_open(B, ActiveSwitches)
     ;   true
     ).
@@ -181,7 +172,6 @@ astar(Start, Goal, LoadType, Path) :-
     
     astar_search([InitPath], Goal, LoadType, SolutionState),
     
-    % 4. Extraemos el historial de celdas y lo invertimos
     SolutionState = path(_, _, _, ReversePath),
     reverse(ReversePath, Path).
 
