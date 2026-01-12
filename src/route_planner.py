@@ -240,6 +240,7 @@ class RoutePlanner():
         return res["truth"]
 
     def get_route_for_load(self, type="standard"):
+        self.current_load = type   
         q = janus.query_once("route(LoadType, Path)", { "LoadType" : type })
         return q["Path"]
 
@@ -457,6 +458,33 @@ class RoutePlanner():
         ]
 
         self.ax.legend(handles=legend_elements, loc='upper left', bbox_to_anchor=(1.05, 1), borderaxespad=0.)
+        # --- Show load type below legend ---
+        load_type = getattr(self, "current_load", "standard")
+
+        load_style = {
+            "standard":    {"color": "black",     "icon": "📦"},
+            "fragile":     {"color": "goldenrod", "icon": "⚠"},
+            "biochemical": {"color": "purple",    "icon": "☣"},
+            "dangerous":   {"color": "red",       "icon": "☠"},
+        }.get(load_type, {"color": "black", "icon": ""})
+
+        self.ax.text(
+            1.05, 0.55,                               # ↓ debajo de la leyenda
+            f"{load_style['icon']} Load: {load_type.upper()}",
+            transform=self.ax.transAxes,
+            ha='left', va='bottom',
+            fontsize=11,
+            fontweight='bold',
+            color=load_style["color"],
+            bbox=dict(
+                facecolor='white',
+                edgecolor=load_style["color"],
+                boxstyle='round,pad=0.35',
+                alpha=0.95
+            ),
+            zorder=50
+        )
+
         self.fig.tight_layout()
 
         plt.title("World map")
@@ -510,6 +538,7 @@ if __name__ == "__main__":
     conveyors =[
         ("c", 15, (0,3), (7,5))
     ]
+    current_load = "standard"
 
     planner = RoutePlanner(np.asarray(map, dtype=np.int32), doors, barriers, items, zones, conveyors)
     planner.set_current_pos(0,4)
@@ -561,7 +590,7 @@ if __name__ == "__main__":
     q = janus.query_once("can_enter(cell(3,7), [])")
     print(f"Can enter door 3 7? {q}")
 
-    route = planner.get_route_for_load("biochemical")
+    route = planner.get_route_for_load("standard")
     print("--- ROUTE ---")
     print(route)
 

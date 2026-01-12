@@ -136,10 +136,10 @@ barrier_open(B, ActiveSwitches) :-
     member(switch(B), ActiveSwitches).
 
 % can_enter(+Cell, +Keys, +ActiveSwitches)
-% 1) primero aplica tu regla actual de puertas/llaves
+% 1) primero aplica regla actual de puertas/llaves
 % 2) si hay barrera en la celda, solo se entra si está abierta
 can_enter(Cell, Keys, ActiveSwitches) :-
-    can_enter(Cell, Keys),   % reutiliza tu can_enter/2 actual
+    can_enter(Cell, Keys),   % reutiliza can_enter/2 actual
     (   located_at(barrier(B), Cell)
     ->  barrier_open(B, ActiveSwitches)
     ;   true
