@@ -508,11 +508,11 @@ if __name__ == "__main__":
     ]
 
     conveyors =[
-        ("c", 20, (0,3), (7,5))
+        ("c", 15, (0,3), (7,5))
     ]
 
     planner = RoutePlanner(np.asarray(map, dtype=np.int32), doors, barriers, items, zones, conveyors)
-    planner.set_current_pos(0,3)
+    planner.set_current_pos(0,4)
     print("--- SMOOTH CELLS ---")
     q = janus.query("floor_type(cell(X,Y),smooth)")
     while ( s := q.next() ):
@@ -549,7 +549,7 @@ if __name__ == "__main__":
         print(s['X'], s['Y'], s['D'])
     q.close()
 
-    planner.set_goal(6,4)
+    planner.set_goal(6,5)
     print("--- GOAL LOCATION ---")
     q = janus.query("located_at(goal,cell(X,Y))")
     while ( s := q.next() ):
@@ -561,7 +561,7 @@ if __name__ == "__main__":
     q = janus.query_once("can_enter(cell(3,7), [])")
     print(f"Can enter door 3 7? {q}")
 
-    route = planner.get_route_for_load()#"biochemical")
+    route = planner.get_route_for_load("biochemical")
     print("--- ROUTE ---")
     print(route)
 
