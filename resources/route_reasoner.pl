@@ -32,8 +32,8 @@ adjacent(cell(X,Y1), cell(X,Y2)) :- cell(X,Y1), cell(X,Y2), Y1 #= Y2+1.
 adjacent(cell(X1,Y), cell(X2,Y)) :- cell(X1,Y), cell(X2,Y), X1 #= X2+1.
 adjacent(cell(X1,Y), cell(X2,Y)) :- cell(X1,Y), cell(X2,Y), X1 #= X2-1.
 
-connected(A, B) :- adjacent(A, B).
-connected(A, B) :- conveyor(C, _), entry(C, A), exit(C, B).
+connected(A, B, 1) :- adjacent(A, B).
+connected(A, B, D) :- entry(C, A), conveyor(C, D), exit(C, B).
 
 % compatible_floor(LoadType, FloorType)
 %   -> LoadType ∈ {standard, fragile, biochemical, dangerous}
@@ -106,9 +106,9 @@ can_enter(Cell, Keys) :-
 %  2) To debe ser pasable para la carga
 %  3) To debe poder “entrarse” según puertas/llaves y barreras/pulsadores
 %  4) al entrar, se actualizan las llaves recogidas y el estado de los pulsadores
-% step(+From, +To, +LoadType, +KeysIn, -KeysOut, +SwitchesIn, -SwitchesOut)
-step(From, To, LoadType, KeysIn, KeysOut, SwitchesIn, SwitchesOut) :-
-    connected(From, To),
+% step(+From, +To, +LoadType, +KeysIn, -KeysOut, +SwitchesIn, -SwitchesOut, -D)
+step(From, To, LoadType, KeysIn, KeysOut, SwitchesIn, SwitchesOut, D) :-
+    connected(From, To, D),
     passable(To, LoadType),
     can_enter(To, KeysIn, SwitchesIn),
     update_keys(To, KeysIn, KeysOut),
@@ -186,20 +186,16 @@ astar_search([BestPath | RestQueue], Goal, LoadType, Solution) :-
     findall(
         ChildPath,
         (
-            % a) Generar transición válida usando tu predicado STEP
-            transition(CurrentState, NextState, LoadType),
+            transition(CurrentState, NextState, LoadType, DStep),
             
-            % b) Evitar ciclos simples (no volver a un estado ya en ESTE camino)
             NextState = state(NextCell, _, _),
             \+ member(NextCell, History), 
             
-            % c) Calcular nuevos valores F, G, H
-            NewG is G + 1,
+            NewG is G + DStep,
             NextState = state(NextCell, _, _),
             manhattan(NextCell, Goal, D),
             NewF is NewG + D,
             
-            % d) Crear estructura del nuevo camino
             ChildPath = path(NewF, NewG, NextState, [NextCell | History])
         ),
         Children
@@ -210,8 +206,8 @@ astar_search([BestPath | RestQueue], Goal, LoadType, Solution) :-
     
     astar_search(SortedQueue, Goal, LoadType, Solution).
 
-transition(state(Current, KeysIn, SwitchesIn), state(Next, KeysOut, SwitchesOut), LoadType) :-
-    step(Current, Next, LoadType, KeysIn, KeysOut, SwitchesIn, SwitchesOut).
+transition(state(Current, KeysIn, SwitchesIn), state(Next, KeysOut, SwitchesOut), LoadType, D) :-
+    step(Current, Next, LoadType, KeysIn, KeysOut, SwitchesIn, SwitchesOut, D).
 
 % translate the path into a data structure manageable by Python
 path_to_python([],[]).

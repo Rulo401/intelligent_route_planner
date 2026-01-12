@@ -56,7 +56,7 @@ class RoutePlanner():
     #   ax: plot artist
     #   cmap: color map
     #   norm: color normalization
-    def __init__(self, map, doors=[], barriers=[], items=[], zones=[]):
+    def __init__(self, map, doors=[], barriers=[], items=[], zones=[], conveyors=[]):
         janus.consult("../resources/route_reasoner.pl")
         
         x, y = 0, 0
@@ -115,6 +115,11 @@ class RoutePlanner():
                 janus.query_once("assertz(located_at(key(Name), cell(X,Y)))", { "Name" : name, "X" : x, "Y": y})
             elif item_type == "switch":
                 janus.query_once("assertz(located_at(switch(Name), cell(X,Y)))", { "Name" : name, "X" : x, "Y": y})
+
+        for name, length, (x1, y1), (x2, y2) in conveyors:
+            janus.query_once("assertz(conveyor(Name,Length))", { "Name" : name, "Length" : length })
+            janus.query_once("assertz(entry(Name,cell(X,Y)))", { "Name" : name, "X" : x1, "Y": y1 })
+            janus.query_once("assertz(exit(Name,cell(X,Y)))", { "Name" : name, "X" : x2, "Y": y2 })
 
         # Setup plot
         plt.ion()
@@ -200,6 +205,15 @@ class RoutePlanner():
         q.close()
 
         return switches
+    
+    def get_conveyors_locations(self):
+        conveyors = []
+        q = janus.query("conveyor(Name,L), entry(Name,cell(EntryX,EntryY)), exit(Name,cell(ExitX,ExitY))")
+        while (s := q.next()):
+            conveyors.append((s["Name"], s["L"], (s["EntryX"],s["EntryY"]), (s["ExitX"],s["ExitY"])))
+        q.close()
+
+        return conveyors
 
     def get_current_pos(self):
         res = janus.query_once("located_at(robot, cell(X,Y))")
@@ -336,6 +350,23 @@ class RoutePlanner():
                     ha='center', va='center', 
                     color='black', fontweight='bold',
                     zorder=11)
+        
+        # Show conveyors 
+        for name, length, (ex, ey), (sx, sy) in self.get_conveyors_locations():
+            self.ax.plot(ex, ey, marker='h', markersize=18, color="darkviolet", markeredgecolor='black', markeredgewidth=2, zorder=8)
+            self.ax.text(ex, ey, "IN", ha='center', va='center', color='white', fontsize=7, fontweight='bold', zorder=9)
+            
+            self.ax.plot(sx, sy, marker='H', markersize=18, color="darkviolet", markeredgecolor='black', markeredgewidth=2, zorder=8)
+            self.ax.text(sx, sy, "OUT", ha='center', va='center', color='white', fontsize=6, fontweight='bold', zorder=9)
+
+            self.ax.annotate("", 
+                             xy=(sx, sy), xycoords='data',
+                             xytext=(ex, ey), textcoords='data',
+                             arrowprops=dict(arrowstyle="->", color="darkviolet", lw=2, linestyle='--', shrinkA=10, shrinkB=10),
+                             zorder=7)
+            
+            mid_x, mid_y = (ex + sx) / 2, (ey + sy) / 2
+            self.ax.text(mid_x, mid_y, f"{name[:1]}: {length}", color="darkviolet", fontsize=8, fontweight='bold', ha='center', va='center', zorder=9, bbox=dict(facecolor='white', alpha=0.7, edgecolor='none', pad=1))
 
         # Show doors
         for door, start, end in self.get_doors():
@@ -416,6 +447,10 @@ class RoutePlanner():
                    markerfacecolor='gold', markeredgecolor='k', markersize=10),
             Line2D([0], [0], marker='s', color='w', label='Switch',
                    markerfacecolor='grey', markeredgecolor='k', markersize=10),
+
+            # Conveyors
+            Line2D([0], [0], marker='h', color='w', label='Conveyor IN', markerfacecolor='darkviolet', markeredgecolor='w', markersize=10),
+            Line2D([0], [0], marker='H', color='w', label='Conveyor OUT', markerfacecolor='darkviolet', markeredgecolor='w', markersize=10),
             
             # Route
             Line2D([0], [0], color='blue', lw=2, label='Route')
@@ -425,22 +460,22 @@ class RoutePlanner():
         self.fig.tight_layout()
 
         plt.title("World map")
-        plt.draw()      # Fuerza el dibujado
-        plt.pause(0.5)  # Pausa 0.5 segundos para que el ojo humano lo vea
+        plt.draw()
+        plt.pause(0.5)
 
 if __name__ == "__main__":
     map = [
-        [0, 4, 4, 4, 4, 4, 4],
-        [1, 1, 1, 1, 0, 1, 1],
-        [1, 3, 1, 0, 0, 2, 2],
-        [1, 3, 1, 0, 0, 2, 2],
-        [1, 3, 1, 0, 0, 2, 2],
-        [1, 3, 1, 0, 0, 2, 2],
-        [1, 3, 1, 0, 2, 2, 2],
-        [1, 3, 1, 1, 2, 0, 0],
-        [1, 3, 1, 1, 2, 0, 0],
-        [1, 1, 1, 0, 0, 0, 0],
-        [1, 1, 1, 0, 0, 0, 0]
+        [0, 4, 4, 4, 4, 4, 4, 0],
+        [1, 1, 1, 1, 0, 1, 1, 0],
+        [1, 3, 1, 0, 0, 2, 2, 0],
+        [1, 3, 1, 0, 0, 2, 2, 0],
+        [1, 3, 1, 0, 0, 2, 2, 2],
+        [1, 3, 1, 0, 0, 2, 2, 0],
+        [1, 3, 1, 0, 2, 2, 2, 0],
+        [1, 3, 1, 1, 2, 0, 0, 0],
+        [1, 3, 1, 1, 2, 0, 0, 0],
+        [1, 1, 1, 0, 0, 0, 0, 0],
+        [1, 1, 1, 0, 0, 0, 0, 0]
     ]
 
     items = [
@@ -457,20 +492,24 @@ if __name__ == "__main__":
     ]
 
     zones = [
-        [0, 1, 1, 1, 1, 1, 1],
-        [2, 2, 1, 1, 0, 1, 1],
-        [2, 2, 3, 0, 0, 1, 1],
-        [2, 2, 3, 0, 0, 1, 1],
-        [2, 2, 3, 0, 0, 3, 3],
-        [2, 2, 3, 0, 0, 3, 3],
-        [2, 2, 3, 0, 3, 3, 3],
-        [3, 3, 3, 3, 3, 0, 0],
-        [3, 3, 3, 3, 3, 0, 0],
-        [3, 3, 3, 0, 0, 0, 0],
-        [3, 3, 3, 0, 0, 0, 0]
+        [0, 1, 1, 1, 1, 1, 1, 0],
+        [2, 2, 1, 1, 0, 1, 1, 0],
+        [2, 2, 3, 0, 0, 1, 1, 0],
+        [2, 2, 3, 0, 0, 1, 1, 0],
+        [2, 2, 3, 0, 0, 3, 3, 0],
+        [2, 2, 3, 0, 0, 3, 3, 0],
+        [2, 2, 3, 0, 3, 3, 3, 0],
+        [3, 3, 3, 3, 3, 0, 0, 0],
+        [3, 3, 3, 3, 3, 0, 0, 0],
+        [3, 3, 3, 0, 0, 0, 0, 0],
+        [3, 3, 3, 0, 0, 0, 0, 0]
     ]
 
-    planner = RoutePlanner(np.asarray(map, dtype=np.int32), doors, barriers, items, zones)
+    conveyors =[
+        ("c", 20, (0,2), (7,4))
+    ]
+
+    planner = RoutePlanner(np.asarray(map, dtype=np.int32), doors, barriers, items, zones, conveyors)
     planner.set_current_pos(0,3)
     print("--- SMOOTH CELLS ---")
     q = janus.query("floor_type(cell(X,Y),smooth)")
@@ -517,8 +556,6 @@ if __name__ == "__main__":
 
     q = janus.query_once("can_enter(cell(5,1), [])")
     print(f"Can enter door 5 1? {q}")
-    # q = janus.query_once("assertz(key(a))")
-    # print(f"Can enter door 5 1? {q}")
     q = janus.query_once("can_enter(cell(3,7), [])")
     print(f"Can enter door 3 7? {q}")
 
@@ -527,5 +564,5 @@ if __name__ == "__main__":
     print(route)
 
     planner.print_current_map(route)
-    plt.ioff() # Desactivar modo interactivo
-    plt.show() # Mantener la ventana abierta al final para ver el resultado
+    plt.ioff()
+    plt.show()
